@@ -1,0 +1,27 @@
+{
+  "name": "RapidBootWiFi",
+  "version": "1.0.0",
+  "description": "A lightweight library for ESP32/ESP8266 that handles 3-rapid-boot WiFi resets, LittleFS boot counting, and WiFiManager setup.",
+  "keywords": ["wifi", "wifimanager", "boot-counter", "littlefs", "reset", "esp32", "esp8266"],
+  "authors": [
+    {
+      "name": "Idlan Zafran Mohd Zaidie",
+      "maintainer": true
+    }
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/IdlanZafran/RapidBootWiFi.git"
+  },
+  "frameworks": "arduino",
+  "platforms": [
+    "espressif32",
+    "espressif8266"
+  ],
+  "dependencies": [
+    {
+      "name": "tzapu/WiFiManager",
+      "version": "^2.0.16-rc.2"
+    }
+  ]
+}
