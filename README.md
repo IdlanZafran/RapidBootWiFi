@@ -11,8 +11,20 @@ A robust, drop-in library for ESP32 and ESP8266 devices that automatically handl
 * **Auto-Reconnect:** Non-blocking background keep-alive ensures your device silently reconnects if the router drops.
 * **Dynamic Settings:** Change the AP name, timeout duration, or required boot count on the fly.
 
-## Installation (PlatformIO)
-Drop the `RapidBootWiFi` folder into your project's `lib` directory. PlatformIO will automatically read the `library.json` file and install the required `tzapu/WiFiManager` dependency.
+## Installation
+
+### For Arduino IDE
+1. Open the Arduino IDE.
+2. Go to **Sketch** -> **Include Library** -> **Manage Libraries...**
+3. In the search bar, type **RapidBootWiFi** by Idlan Zafran Mohd Zaidie.
+4. Click **Install**.
+
+### For PlatformIO
+Add the following to your `platformio.ini` file under your environment configuration:
+```ini
+lib_deps =
+    [https://github.com/IdlanZafran/RapidBootWiFi.git](https://github.com/IdlanZafran/RapidBootWiFi.git)
+```
 
 ## Quick Start
 
