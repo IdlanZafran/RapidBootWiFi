@@ -19,10 +19,7 @@
     "espressif32",
     "espressif8266"
   ],
-  "dependencies": [
-    {
-      "name": "tzapu/WiFiManager",
-      "version": "^2.0.16-rc.2"
-    }
-  ]
+  "dependencies": {
+      "tzapu/WiFiManager": "^2.0.16-rc.2"
+  }
 }
