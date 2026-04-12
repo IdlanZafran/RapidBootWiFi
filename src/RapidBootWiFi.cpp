@@ -16,7 +16,13 @@ RapidBootWiFi::~RapidBootWiFi() {
     // Clean up only the memory that the library allocated itself
     for (size_t i = 0; i < _customParams.size(); i++) {
         if (_libraryOwnsParam[i]) {
+            
+            // Temporarily disable the virtual destructor warning for this third-party class
+            #pragma GCC diagnostic push
+            #pragma GCC diagnostic ignored "-Wdelete-non-virtual-dtor"
             delete _customParams[i]; 
+            #pragma GCC diagnostic pop
+            
         }
     }
     _customParams.clear();
