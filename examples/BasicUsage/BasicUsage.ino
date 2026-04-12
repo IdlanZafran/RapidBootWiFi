@@ -3,40 +3,46 @@
  * Author: Idlan Zafran Mohd Zaidie
  * * Description:
  * This sketch demonstrates the drop-in RapidBootWiFi library. 
- * When the device boots, it waits. If it is turned off and on 
- * 3 times within those initial windows, it wipes the saved WiFi credentials.
- * It also demonstrates how to inject custom parameters into the WiFiManager portal.
+ * - 3 Rapid Boots: Wipes saved WiFi credentials.
+ * - 5 Rapid Boots: Factory Resets (Wipes WiFi + Custom Parameters/LittleFS).
+ * - Hold BOOT Button on startup: Opens the Config Portal without dropping WiFi.
  */
 
 #include <Arduino.h>
 #include <RapidBootWiFi.h>
 
 // Default variables to populate the portal with
-char serverURL[] = "thingssentral.my";
-char userID[] = "000953";
+char serverURL[100] = "thingssentral.my";
+char userID[16] = "000953";
 
 void setup() {
   Serial.begin(115200);
   Serial.println("\n--- Starting SyokCircuit Node ---");
 
-  // 1. Configure the library (Overrides the default settings)
+  // Setup the built-in BOOT/FLASH button on ESP boards (usually GPIO 0)
+  pinMode(0, INPUT_PULLUP);
+
+  // 1. Configure the library
   myWiFi.setAPName("Smart Plug");
-  myWiFi.setTimeout(3000);
-  myWiFi.setMaxBoots(3);
+  myWiFi.setTimeout(3000); // 3-second rapid-boot window
+  myWiFi.setBootThresholds(3, 5); // 3 boots = WiFi Reset | 5 boots = Factory Reset
 
   // 2. Add custom parameters for the web portal
   // Syntax: addParameter(id, placeholder_text, default_value, length)
   myWiFi.addParameter("server", "Server URL", serverURL, 100);
-  myWiFi.addParameter("device", "User ID", userID, 10);
+  myWiFi.addParameter("device", "User ID", userID, 16);
 
-  // 3. Start the library
-  // NOTE: This function will pause the code for exactly 3 seconds 
-  // to evaluate the rapid-boot window before attempting to connect to WiFi.
-  Serial.println("Initializing RapidBootWiFi...");
-  myWiFi.begin();
+  // 3. Start the library or open the portal
+  // If you hold the BOOT button while plugging it in, force the config portal
+  if (digitalRead(0) == LOW) {
+      Serial.println("Setup button held! Opening Configuration Portal...");
+      myWiFi.openPortal(); // This pauses execution until the user saves/exits the portal
+  } else {
+      Serial.println("Initializing RapidBootWiFi...");
+      myWiFi.begin(); // Standard rapid-boot logic and connection
+  }
 
   // 4. Read the values after successful connection
-  // Using the new helper function to fetch the values by their ID
   Serial.println("\n--- Current Configuration ---");
   Serial.printf("Server URL: %s\n", myWiFi.getParameterValue("server"));
   Serial.printf("Device ID : %s\n", myWiFi.getParameterValue("device"));

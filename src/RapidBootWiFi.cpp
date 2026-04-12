@@ -4,10 +4,11 @@
 RapidBootWiFi myWiFi;
 
 // --- CONSTRUCTOR ---
-RapidBootWiFi::RapidBootWiFi(const char* apName, unsigned long timeoutMs, int maxBoots) {
+RapidBootWiFi::RapidBootWiFi(const char* apName, unsigned long timeoutMs, int wifiBoots, int factoryBoots) {
     _apName = apName;
     _timeoutMs = timeoutMs;
-    _maxBoots = maxBoots;
+    _wifiBoots = wifiBoots;
+    _factoryBoots = factoryBoots;
     _lastWifiCheck = 0;
 }
 
@@ -30,15 +31,16 @@ RapidBootWiFi::~RapidBootWiFi() {
 }
 
 // --- SETTERS ---
-void RapidBootWiFi::setAPName(const char* newAPName) {
-    if (newAPName != nullptr && strlen(newAPName) > 0) {
-        _apName = newAPName;
+void RapidBootWiFi::setBootThresholds(int wifiBoots, int factoryBoots) {
+    if (wifiBoots > 0 && factoryBoots > wifiBoots) {
+        _wifiBoots = wifiBoots;
+        _factoryBoots = factoryBoots;
     }
 }
 
-void RapidBootWiFi::setMaxBoots(int newMaxBoots) {
-    if (newMaxBoots > 0) {
-        _maxBoots = newMaxBoots;
+void RapidBootWiFi::setAPName(const char* newAPName) {
+    if (newAPName != nullptr && strlen(newAPName) > 0) {
+        _apName = newAPName;
     }
 }
 
@@ -65,12 +67,10 @@ void RapidBootWiFi::addParameter(const char* id, const char* placeholder, const 
 // --- CORE FUNCTIONS ---
 void RapidBootWiFi::begin() {
     #ifdef ESP32
-        // ESP32 Way: 'true' means format if it fails
         if (!LittleFS.begin(true)) {
             Serial.println("LittleFS Mount Failed");
         }
     #elif defined(ESP8266)
-        // ESP8266 Way: Takes zero arguments. We must format manually if it fails.
         if (!LittleFS.begin()) {
             Serial.println("LittleFS Mount Failed. Formatting now...");
             LittleFS.format(); 
@@ -85,15 +85,28 @@ void RapidBootWiFi::begin() {
     bootCount++;
     Serial.printf("Boot Count: %d\n", bootCount);
 
-    // 2. Check for rapid boots
-    if (bootCount >= _maxBoots) {
-        Serial.println("Rapid boots detected! Resetting WiFi...");
+    // 2. Check for thresholds
+    if (bootCount >= _factoryBoots) {
+        Serial.println(">>> 5 RAPID BOOTS: FACTORY RESETTING <<<");
         WiFiManager wifiManager;
-        wifiManager.resetSettings(); 
-        bootCount = 0;               
+        wifiManager.resetSettings(); // Clear WiFi
+        
+        LittleFS.format(); // Wipe saved parameters and ThingsSentral history
+        Serial.println("LittleFS wiped clean.");
+        
+        bootCount = 0; // Reset counter because the ultimate action is done
+    } 
+    else if (bootCount == _wifiBoots) {
+        Serial.println(">>> 3 RAPID BOOTS: Resetting WiFi ONLY <<<");
+        WiFiManager wifiManager;
+        wifiManager.resetSettings(); // Clear WiFi
+        
+        // IMPORTANT: We do NOT reset bootCount to 0 here. 
+        // We let it save as '3'. If the user unplugs it again within 
+        // the timeout window, it will climb to 4, and then 5.
     }
 
-    // 3. Save the incremented boot count
+    // 3. Save the current boot count
     _writeBootCount(bootCount);
 
     // ==========================================
@@ -106,6 +119,8 @@ void RapidBootWiFi::begin() {
         delay(10); // Keep watchdog happy
     }
 
+    // If the ESP survived the waiting room without losing power, 
+    // the user has stopped turning it on and off. Reset back to zero.
     Serial.println("Rapid-boot window closed. Resetting counter to 0.");
     _writeBootCount(0);
     // ==========================================
@@ -173,8 +188,15 @@ void RapidBootWiFi::_loadCustomParams() {
         if (readFile) {
             String savedValue = readFile.readString();
             readFile.close();
-            strncpy((char*)_customParams[i]->getValue(), savedValue.c_str(), _customParams[i]->getValueLength());
-            Serial.printf("Loaded parameter [%s]: %s\n", _customParams[i]->getID(), savedValue.c_str());
+            
+            // FIX: Ensure we don't overflow and ALWAYS null-terminate
+            int maxLen = _customParams[i]->getValueLength();
+            char* dest = (char*)_customParams[i]->getValue();
+            memset(dest, 0, maxLen); // Clear the buffer first
+            strncpy(dest, savedValue.c_str(), maxLen - 1);
+            dest[maxLen - 1] = '\0'; // Force termination
+            
+            Serial.printf("Loaded parameter [%s]: %s\n", _customParams[i]->getID(), dest);
         }
     }
 }
@@ -212,4 +234,56 @@ const char* RapidBootWiFi::getParameterValue(const char* id) {
         }
     }
     return ""; // Return empty string if parameter not found
+}
+
+// --- ON-DEMAND CONFIG PORTAL ---
+void RapidBootWiFi::openPortal() {
+    Serial.println(">>> FORCING CONFIG PORTAL (Keeping WiFi Intact) <<<");
+    WiFiManager wifiManager;
+
+    // 1. Load the current parameters so they show up in the text boxes
+    _loadCustomParams();
+    for (size_t i = 0; i < _customParams.size(); i++) {
+        wifiManager.addParameter(_customParams[i]);
+    }
+
+    // 2. Add a visual separator and the Factory Reset Input
+    // Note: These are local variables, so they safely clean themselves up from memory!
+    WiFiManagerParameter dangerDivider("<br><hr><h3 style='color:red;'>Danger Zone</h3>");
+    WiFiManagerParameter wipeInput("wipe", "Type <b>YES</b> to Factory Reset IDs", "", 5);
+    
+    wifiManager.addParameter(&dangerDivider);
+    wifiManager.addParameter(&wipeInput);
+
+    // 3. Start the portal and wait for user to hit Save or Exit
+    if (!wifiManager.startConfigPortal(_apName)) {
+        Serial.println("Portal exited without saving.");
+    }
+
+    // 4. Check if the user requested a Factory Reset
+    String wipeCommand = String(wipeInput.getValue());
+    wipeCommand.toUpperCase(); // Make it case-insensitive
+
+    if (wipeCommand == "YES") {
+        Serial.println(">>> WIPE COMMAND RECEIVED! Deleting saved parameters...");
+        
+        // Loop through and dynamically delete only the parameter files
+        for (size_t i = 0; i < _customParams.size(); i++) {
+            String filename = String("/param_") + _customParams[i]->getID() + ".txt";
+            LittleFS.remove(filename);
+            Serial.printf("Deleted: %s\n", filename.c_str());
+        }
+        
+        Serial.println("Parameters wiped successfully. Restarting to apply defaults...");
+        delay(1000);
+        ESP.restart();
+    }
+
+    // 5. If "YES" wasn't typed, save the parameters normally
+    Serial.println("Saving updated parameters...");
+    _saveCustomParams();
+    
+    Serial.println("Restarting to apply changes...");
+    delay(1000);
+    ESP.restart();
 }

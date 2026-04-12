@@ -16,32 +16,33 @@
 
 class RapidBootWiFi {
   public:
-    RapidBootWiFi(const char* apName = "Smart_Device_Setup", unsigned long timeoutMs = 3000, int maxBoots = 3);
-    
-    // Destructor to prevent memory leaks
+    RapidBootWiFi(const char* apName = "Smart_Device_Setup", unsigned long timeoutMs = 3000, int wifiBoots = 3, int factoryBoots = 5);
     ~RapidBootWiFi();
     
-    // Core Functions
     void begin(); 
     void loop();
-
-    // Setters
+    
+    void openPortal();
+    
     void setAPName(const char* newAPName);
-    void setMaxBoots(int newMaxBoots);
     void setTimeout(unsigned long newTimeoutMs);
     
-    // Parameter Injection
-    void addParameter(WiFiManagerParameter* customParam); // Original way (User manages memory)
-    void addParameter(const char* id, const char* placeholder, const char* defaultValue, int length); // New easy way (Library manages memory)
+    // NEW: Function to change both thresholds
+    void setBootThresholds(int wifiBoots, int factoryBoots); 
+    
+    void addParameter(WiFiManagerParameter* customParam); 
+    void addParameter(const char* id, const char* placeholder, const char* defaultValue, int length); 
 
-    // Get parameter value by ID
     const char* getParameterValue(const char* id);
     
   private:
     const char* _apName;
     unsigned long _timeoutMs;
-    int _maxBoots;
     
+    // NEW: Two distinct counters
+    int _wifiBoots;
+    int _factoryBoots;
+        
     unsigned long _lastWifiCheck;
     
     // Stores pointers to the parameters
