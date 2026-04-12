@@ -1,5 +1,8 @@
 #include "RapidBootWiFi.h"
 
+// Instantiate the global object so the user doesn't have to
+RapidBootWiFi myWiFi;
+
 // --- CONSTRUCTOR ---
 RapidBootWiFi::RapidBootWiFi(const char* apName, unsigned long timeoutMs, int maxBoots) {
     _apName = apName;
@@ -8,7 +11,19 @@ RapidBootWiFi::RapidBootWiFi(const char* apName, unsigned long timeoutMs, int ma
     _lastWifiCheck = 0;
 }
 
-// --- SETTERS & PARAMETER INJECTION ---
+// --- DESTRUCTOR ---
+RapidBootWiFi::~RapidBootWiFi() {
+    // Clean up only the memory that the library allocated itself
+    for (size_t i = 0; i < _customParams.size(); i++) {
+        if (_libraryOwnsParam[i]) {
+            delete _customParams[i]; 
+        }
+    }
+    _customParams.clear();
+    _libraryOwnsParam.clear();
+}
+
+// --- SETTERS ---
 void RapidBootWiFi::setAPName(const char* newAPName) {
     if (newAPName != nullptr && strlen(newAPName) > 0) {
         _apName = newAPName;
@@ -25,9 +40,21 @@ void RapidBootWiFi::setTimeout(unsigned long newTimeoutMs) {
     _timeoutMs = newTimeoutMs;
 }
 
+// --- PARAMETER INJECTION ---
+
+// Original method: User passes a pointer
 void RapidBootWiFi::addParameter(WiFiManagerParameter* customParam) {
     _customParams.push_back(customParam);
+    _libraryOwnsParam.push_back(false); // User owns this, we won't delete it
 }
+
+// New method: Library handles the WiFiManager stuff behind the scenes
+void RapidBootWiFi::addParameter(const char* id, const char* placeholder, const char* defaultValue, int length) {
+    WiFiManagerParameter* newParam = new WiFiManagerParameter(id, placeholder, defaultValue, length);
+    _customParams.push_back(newParam);
+    _libraryOwnsParam.push_back(true); // Library created this, we must delete it later
+}
+
 
 // --- CORE FUNCTIONS ---
 void RapidBootWiFi::begin() {
@@ -69,24 +96,19 @@ void RapidBootWiFi::begin() {
     Serial.printf("Waiting %lu ms for rapid-boot window to close...\n", _timeoutMs);
     
     unsigned long startTime = millis();
-    // Hold the ESP32 here until the timeout duration has passed
     while (millis() - startTime < _timeoutMs) {
-        delay(10); // Small delay to keep the watchdog timer happy
+        delay(10); // Keep watchdog happy
     }
 
-    // If the device is still powered on after the timeout, reset the count to 0
     Serial.println("Rapid-boot window closed. Resetting counter to 0.");
     _writeBootCount(0);
     // ==========================================
-
-
-// ... (Your Waiting Room logic stays up here) ...
 
     // 4. Setup WiFiManager
     Serial.println("Starting WiFi...");
     WiFiManager wifiManager;
 
-    // ---> ADD THIS: Load the saved parameters from LittleFS <---
+    // Load the saved parameters from LittleFS
     _loadCustomParams();
 
     // Inject parameters into the portal
@@ -103,26 +125,17 @@ void RapidBootWiFi::begin() {
     
     Serial.println("WiFi Connected!");
     
-    // ---> ADD THIS: Save the parameters if the user changed them <---
+    // Save the parameters if the user changed them
     _saveCustomParams();
-
 }
 
 // --- KEEPALIVE LOOP ---
 void RapidBootWiFi::loop() {
-    // Translation: "Is the WiFi disconnected right now?"
     if (WiFi.status() != WL_CONNECTED) {
-        
-        // Translation: "Has it been at least 10 seconds since we last tried to reconnect?"
-        // We do this so we don't freeze the ESP by trying to connect a thousand times a second.
         if (millis() - _lastWifiCheck >= 10000) {
             Serial.println("⚠️ WiFi connection lost! Attempting to reconnect...");
-            
-            // WiFi.reconnect() is a built-in ESP command. 
-            // It tells the chip: "Use the credentials you already have saved in flash and try again!"
             WiFi.reconnect(); 
-            
-            _lastWifiCheck = millis(); // Reset the 10-second timer
+            _lastWifiCheck = millis();
         }
     }
 }
@@ -146,51 +159,33 @@ void RapidBootWiFi::_writeBootCount(int count) {
     }
 }
 
-// ==========================================
-// AUTO-SAVE & AUTO-LOAD PARAMETERS LOGIC
-// ==========================================
-
 void RapidBootWiFi::_loadCustomParams() {
-    // Translation: "Go through every parameter the user gave us one by one."
     for (size_t i = 0; i < _customParams.size(); i++) {
-        
-        // Translation: "Create a unique filename based on the parameter ID."
-        // Example: If ID is "server", filename becomes "/param_server.txt"
         String filename = String("/param_") + _customParams[i]->getID() + ".txt";
-        
         File readFile = LittleFS.open(filename, "r");
         
-        // Translation: "If the file exists, read it and overwrite the default value."
         if (readFile) {
             String savedValue = readFile.readString();
             readFile.close();
-            
-            // This copies the saved LittleFS text directly into the parameter's memory box!
             strncpy((char*)_customParams[i]->getValue(), savedValue.c_str(), _customParams[i]->getValueLength());
-            
             Serial.printf("Loaded parameter [%s]: %s\n", _customParams[i]->getID(), savedValue.c_str());
         }
     }
 }
 
 void RapidBootWiFi::_saveCustomParams() {
-    // Translation: "Go through every parameter again to see if we need to save."
     for (size_t i = 0; i < _customParams.size(); i++) {
-        
         String filename = String("/param_") + _customParams[i]->getID() + ".txt";
         String currentValueInFile = "";
         
-        // 1. Read what is currently inside the file
         File readFile = LittleFS.open(filename, "r");
         if (readFile) {
             currentValueInFile = readFile.readString();
             readFile.close();
         }
         
-        // 2. Get the value currently held in the WiFiManager parameter
         String newValueFromPortal = String(_customParams[i]->getValue());
         
-        // Translation: "Did the user change the value? If they are different, write the new one to memory!"
         if (currentValueInFile != newValueFromPortal) {
             File writeFile = LittleFS.open(filename, "w");
             if (writeFile) {
@@ -200,4 +195,15 @@ void RapidBootWiFi::_saveCustomParams() {
             }
         }
     }
+}
+
+// --- GET PARAMETER VALUE ---
+const char* RapidBootWiFi::getParameterValue(const char* id) {
+    for (size_t i = 0; i < _customParams.size(); i++) {
+        // If the ID matches, return the value!
+        if (strcmp(_customParams[i]->getID(), id) == 0) {
+            return _customParams[i]->getValue();
+        }
+    }
+    return ""; // Return empty string if parameter not found
 }
