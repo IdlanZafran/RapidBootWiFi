@@ -36,6 +36,8 @@ class RapidBootWiFi {
     const char* getParameterValue(const char* id);
 
     int getCurrentBootCount();
+
+    bool wasWiFiReset();
     
   private:
     const char* _apName;
