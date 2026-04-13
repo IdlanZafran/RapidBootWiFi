@@ -3,7 +3,7 @@
 
 **By Idlan Zafran Mohd Zaidie**
 
-[![Version](https://img.shields.io/badge/version-1.1.1-blue.svg)](https://github.com/IdlanZafran/RapidBootWiFi)
+[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://github.com/IdlanZafran/RapidBootWiFi)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A robust, zero-boilerplate, drop-in library for ESP32 and ESP8266 devices. It automatically handles WiFi provisioning via a Captive Portal and provides a physical **Dual-Stage Factory Reset** mechanism by power-cycling the device rapidly. 
