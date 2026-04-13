@@ -287,3 +287,7 @@ void RapidBootWiFi::openPortal() {
     delay(1000);
     ESP.restart();
 }
+
+int RapidBootWiFi::getCurrentBootCount() {
+    return _readBootCount();
+}
