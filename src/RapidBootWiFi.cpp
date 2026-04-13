@@ -291,3 +291,10 @@ void RapidBootWiFi::openPortal() {
 int RapidBootWiFi::getCurrentBootCount() {
     return _readBootCount();
 }
+
+bool RapidBootWiFi::wasWiFiReset() {
+    // Check if boot count was exactly at the wifi threshold
+    // This indicates a WiFi reset just occurred
+    int currentCount = _readBootCount();
+    return (currentCount == _wifiBoots);
+}
