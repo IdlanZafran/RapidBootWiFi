@@ -142,3 +142,26 @@ void RapidBootWiFi::openPortal() {
     _saveCustomParams();
     ESP.restart();
 }
+
+void RapidBootWiFi::setAPName(const char* newAPName) {
+    if (newAPName != nullptr && strlen(newAPName) > 0) {
+        _apName = newAPName;
+    }
+}
+
+void RapidBootWiFi::setTimeout(unsigned long newTimeoutMs) {
+    _timeoutMs = newTimeoutMs;
+}
+
+void RapidBootWiFi::setBootThresholds(int wifiBoots, int factoryBoots) {
+    if (wifiBoots > 0 && factoryBoots > wifiBoots) {
+        _wifiBoots = wifiBoots;
+        _factoryBoots = factoryBoots;
+    }
+}
+
+// The overloaded version where the user passes their own parameter pointer
+void RapidBootWiFi::addParameter(WiFiManagerParameter* customParam) {
+    _customParams.push_back(customParam);
+    _libraryOwnsParam.push_back(false); // User owns this, we won't delete it
+}
