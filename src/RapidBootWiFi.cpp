@@ -81,10 +81,8 @@ void RapidBootWiFi::begin() {
     #endif
 
     // 1. Read and increment boot count
-    int bootCount = _readBootCount();
-    bootCount++;
-    Serial.printf("Boot Count: %d\n", bootCount);
-
+    int bootCount = _activeBootCount; // Use the count already set by incrementAndGetBootCount()
+    Serial.printf("Processing Boot Count: %d\n", bootCount);
     // 2. Check for thresholds
     if (bootCount >= _factoryBoots) {
         Serial.println(">>> 5 RAPID BOOTS: FACTORY RESETTING <<<");
@@ -289,7 +287,7 @@ void RapidBootWiFi::openPortal() {
 }
 
 int RapidBootWiFi::getCurrentBootCount() {
-    return _readBootCount();
+    return _activeBootCount; // Return the session count, not the file count
 }
 
 bool RapidBootWiFi::wasWiFiReset() {
@@ -297,4 +295,12 @@ bool RapidBootWiFi::wasWiFiReset() {
     // This indicates a WiFi reset just occurred
     int currentCount = _readBootCount();
     return (currentCount == _wifiBoots);
+}
+
+int RapidBootWiFi::incrementAndGetBootCount() {
+    int count = _readBootCount();
+    count++;
+    _writeBootCount(count);
+    _activeBootCount = count; // Store it locally
+    return count;
 }

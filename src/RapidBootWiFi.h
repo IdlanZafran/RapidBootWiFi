@@ -36,7 +36,7 @@ class RapidBootWiFi {
     const char* getParameterValue(const char* id);
 
     int getCurrentBootCount();
-
+    int incrementAndGetBootCount(); 
     bool wasWiFiReset();
     
   private:
@@ -55,6 +55,7 @@ class RapidBootWiFi {
     std::vector<bool> _libraryOwnsParam; 
     
     int _readBootCount();
+    int _activeBootCount;
     void _writeBootCount(int count);
     
     void _loadCustomParams();
