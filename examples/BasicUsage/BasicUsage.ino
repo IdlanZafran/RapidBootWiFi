@@ -1,8 +1,11 @@
 /**
- * Example: Basic Usage of RapidBootWiFi (Updated Architecture)
+ * Example: RapidBootWiFi with LED Feedback
  * Author: Idlan Zafran Mohd Zaidie
- * Description:
- * Demonstrates manual increment for LED feedback + wasWiFiReset() check.
+ * Date: 2026
+ * * Flow: 
+ * 1. myWiFi.begin() -> Increments count in LittleFS immediately.
+ * 2. LED Logic -> Uses the incremented count to show visual feedback.
+ * 3. myWiFi.connect() -> Connects to WiFi and starts the 3-second reset window.
  */
 
 #include <Arduino.h>
@@ -12,6 +15,7 @@
 const int LED_BOOT_1 = 14; 
 const int LED_BOOT_2 = 12; 
 const int LED_BOOT_3 = 13;
+const int BUTTON_PIN = 0; // BOOT/Flash button on most ESPs
 
 void updateBootLeds(int count) {
   digitalWrite(LED_BOOT_1, (count >= 1) ? HIGH : LOW);
@@ -28,46 +32,52 @@ void setup() {
   pinMode(LED_BOOT_1, OUTPUT);
   pinMode(LED_BOOT_2, OUTPUT);
   pinMode(LED_BOOT_3, OUTPUT);
-  pinMode(0, INPUT_PULLUP); // BOOT button check
+  pinMode(BUTTON_PIN, INPUT_PULLUP); 
 
-  // 2. IMMEDIATE ACTION: Increment and show LEDs
-  // This happens before the 3-second 'waiting room'
-  int currentCount = myWiFi.incrementAndGetBootCount();
-  Serial.printf("Current Session Boot Count: %d\n", currentCount);
+  // 2. STAGE 1: Increment and Detect Reset
+  // This increments the file and checks thresholds internally.
+  myWiFi.begin(); 
+
+  // 3. STAGE 2: Display Feedback
+  // Now we "peek" at the count that was just incremented.
+  int currentCount = myWiFi.getCurrentBootCount();
+  Serial.printf("Boot Session: %d\n", currentCount);
   updateBootLeds(currentCount);
 
-  // 3. Configure Library
+  // 4. Configuration
   myWiFi.setAPName("Smart_Device_Setup");
-  myWiFi.setTimeout(3000); 
+  myWiFi.setTimeout(3000); // 3 seconds to "stay on" before count resets to 0
   myWiFi.setBootThresholds(3, 5);
+  myWiFi.addParameter("uID", "User ID", "00953", 15);
 
-  // 4. Add Custom Parameters
-  myWiFi.addParameter("server", "Server URL", "thingssentral.my", 100);
-
-  // 5. Start Process
-  if (digitalRead(0) == LOW) {
-    Serial.println(">>> Setup button held! Opening Portal...");
+  // 5. STAGE 3: Run Connection
+  // Check if button is held for manual portal, otherwise start connection
+  if (digitalRead(BUTTON_PIN) == LOW) {
+    Serial.println(">>> Manual Setup Triggered! Opening Portal...");
     myWiFi.openPortal(); 
   } else {
-    // begin() uses the count we just incremented to decide on resets
-    myWiFi.begin(); 
+    // This connects to WiFi and performs the 3-second waiting room pause.
+    myWiFi.connect(); 
   }
 
-  // 6. CHECK: Was WiFi just reset by the 3-boot threshold?
-  // We check this AFTER begin() because that's where the reset happens.
+  // 6. POST-BOOT CHECK
+  // Check if a reset occurred during begin()
   if (myWiFi.wasWiFiReset()) {
-    Serial.println(">>> ALERT: WiFi was reset due to 3 rapid boots!");
-    // You could play a specific tone here or flash LEDs to confirm reset
+    Serial.println(">>> ALERT: WiFi credentials were reset this boot!");
+    // Example: Flash LEDs 5 times to confirm reset success
+    for(int i=0; i<5; i++) {
+        updateBootLeds(3); delay(100);
+        updateBootLeds(0); delay(100);
+    }
   }
 
   // 7. Cleanup UI
-  digitalWrite(LED_BOOT_1, LOW);
-  digitalWrite(LED_BOOT_2, LOW);
-  digitalWrite(LED_BOOT_3, LOW);
-
-  Serial.println("System Ready.");
+  // Turn off LEDs to save power or transition to main app state
+  updateBootLeds(0);
+  Serial.println("System Connected and Ready.");
 }
 
 void loop() {
+  // Handles background WiFi maintenance
   myWiFi.loop(); 
 }
