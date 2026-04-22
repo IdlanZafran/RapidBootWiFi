@@ -55,23 +55,38 @@ void RapidBootWiFi::begin() {
 }
 
 void RapidBootWiFi::connect() {
+  // 1. ONLY launch the blocking WiFiManager if the user intentionally triggered
+  // the 3-rapid-boot reset. Ignore the lack of credentials otherwise.
+  if (_resetOccurred) {
+    Serial.println(">>> Rapid Boot Detected! Opening WiFiManager Portal <<<");
+    
     WiFiManager wifiManager;
     _loadCustomParams();
     for (auto p : _customParams) { wifiManager.addParameter(p); }
 
+    // Give the admin 3 minutes to enter credentials
+    wifiManager.setConfigPortalTimeout(180); 
+
+    // AutoConnect will now act purely as an On-Demand Portal
     if (!wifiManager.autoConnect(_apName)) {
-        delay(3000);
-        ESP.restart();
+      Serial.println("Portal timeout. Rebooting to offline mode...");
+      delay(1000);
+      ESP.restart(); // Restart so it boots normally and the door works again
     }
-    
     _saveCustomParams();
+  } else {
+    Serial.println("Normal boot. Proceeding directly to loop to ensure instant door operation...");
+  }
 
-    // The "Waiting Room" Window
-    unsigned long startTime = millis();
-    while (millis() - startTime < _timeoutMs) { yield(); }
+  // 2. The "Waiting Room" Window
+  // We still wait 3 seconds here so the ESP can catch intentional rapid power cycles
+  unsigned long startTime = millis();
+  while (millis() - startTime < _timeoutMs) { 
+    yield(); 
+  }
 
-    // If we made it here without a reset/power loss, clear the counter
-    _writeBootCount(0);
+  // 3. We survived the boot window without a reset, clear the counter
+  _writeBootCount(0);
 }
 
 int RapidBootWiFi::getCurrentBootCount() { return _activeBootCount; }
